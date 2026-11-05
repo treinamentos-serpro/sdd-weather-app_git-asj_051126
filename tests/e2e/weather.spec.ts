@@ -38,22 +38,40 @@ async function mockWeatherApi(
   geocoding: typeof geocodingResponse | Record<string, never> = geocodingResponse,
   onForecastRequest?: () => void,
 ) {
-  await page.route('https://geocoding-api.open-meteo.com/**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      json: geocoding,
-    });
+  const unexpectedExternalRequests: string[] = [];
+
+  await page.route('https://**/*', async (route) => {
+    const requestUrl = new URL(route.request().url());
+
+    if (requestUrl.hostname === 'geocoding-api.open-meteo.com') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        json: geocoding,
+      });
+      return;
+    }
+
+    if (requestUrl.hostname === 'api.open-meteo.com') {
+      onForecastRequest?.();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        json: forecastResponse,
+      });
+      return;
+    }
+
+    if (requestUrl.hostname === 'fonts.googleapis.com') {
+      await route.fulfill({ status: 200, contentType: 'text/css', body: '' });
+      return;
+    }
+
+    unexpectedExternalRequests.push(requestUrl.href);
+    await route.abort();
   });
 
-  await page.route('https://api.open-meteo.com/**', async (route) => {
-    onForecastRequest?.();
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      json: forecastResponse,
-    });
-  });
+  return unexpectedExternalRequests;
 }
 
 async function searchCampinas(page: Page) {
@@ -65,7 +83,7 @@ async function searchCampinas(page: Page) {
 test('busca uma cidade, exibe a previsão e converte a temperatura para Fahrenheit', async ({
   page,
 }) => {
-  await mockWeatherApi(page);
+  const unexpectedRequests = await mockWeatherApi(page);
   await searchCampinas(page);
 
   await expect(page.getByRole('heading', { name: 'Campinas', exact: true })).toBeVisible();
@@ -75,24 +93,27 @@ test('busca uma cidade, exibe a previsão e converte a temperatura para Fahrenhe
   await page.getByRole('button', { name: 'Fahrenheit' }).click();
 
   await expect(page.getByText('68 °F', { exact: true })).toBeVisible();
+  expect(unexpectedRequests).toEqual([]);
 });
 
 test('mostra o estado vazio quando o geocoding não retorna results', async ({ page }) => {
   let forecastRequests = 0;
-  await mockWeatherApi(page, {}, () => {
+  const unexpectedRequests = await mockWeatherApi(page, {}, () => {
     forecastRequests += 1;
   });
 
   await searchCampinas(page);
 
   await expect(page.getByRole('heading', { name: 'Nenhuma cidade encontrada' })).toBeVisible();
+  await page.waitForLoadState('networkidle');
   await expect(page.getByRole('region', { name: 'Resultado do clima' })).toBeFocused();
   expect(forecastRequests).toBe(0);
+  expect(unexpectedRequests).toEqual([]);
 });
 
 test('renderiza o clima atual no viewport mobile', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
-  await mockWeatherApi(page);
+  const unexpectedRequests = await mockWeatherApi(page);
   await searchCampinas(page);
 
   await expect(page.getByRole('heading', { name: 'Campinas', exact: true })).toBeVisible();
@@ -103,4 +124,5 @@ test('renderiza o clima atual no viewport mobile', async ({ page }) => {
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
   );
   expect(hasHorizontalOverflow).toBe(false);
+  expect(unexpectedRequests).toEqual([]);
 });
