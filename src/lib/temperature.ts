@@ -9,7 +9,7 @@ export function unitLabel(unit: Unit): string {
 }
 
 export function formatTemperature(celsius: number | null, unit: Unit): string {
-  if (celsius === null) return 'Indisponível';
+  if (celsius === null || !Number.isFinite(celsius)) return 'Indisponível';
 
   const converted = convertTemperature(celsius, unit);
   const rounded = Math.sign(converted) * Math.round(Math.abs(converted));

@@ -27,5 +27,6 @@ describe('temperature', () => {
 
   it('keeps missing temperatures unavailable', () => {
     expect(formatTemperature(null, 'celsius')).toBe('Indisponível');
+    expect(formatTemperature(Number.NaN, 'fahrenheit')).toBe('Indisponível');
   });
 });

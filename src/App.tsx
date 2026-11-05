@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import CurrentWeather from './components/CurrentWeather';
 import ForecastList from './components/ForecastList';
 import SearchBar from './components/SearchBar';
@@ -12,6 +12,16 @@ import type { Unit } from './types/weather';
 export default function App() {
   const { status, data, cities, error, query, search, selectCity, retry } = useWeather();
   const [unit, setUnit] = useState<Unit>('celsius');
+  const resultRef = useRef<HTMLElement>(null);
+  const previousStatusRef = useRef(status);
+
+  useEffect(() => {
+    if (previousStatusRef.current === 'loading' && status !== 'loading') {
+      resultRef.current?.focus();
+    }
+
+    previousStatusRef.current = status;
+  }, [status]);
 
   function renderWeatherState() {
     switch (status) {
@@ -33,7 +43,10 @@ export default function App() {
         );
       case 'error':
         return (
-          <ErrorState message={error ?? 'Não foi possível carregar o clima.'} onRetry={retry} />
+          <ErrorState
+            message={error?.message ?? 'Não foi possível carregar o clima.'}
+            onRetry={retry}
+          />
         );
       case 'success':
         if (!data) {
@@ -96,7 +109,12 @@ export default function App() {
           </section>
         )}
 
-        <section aria-label="Resultado do clima" aria-busy={status === 'loading'}>
+        <section
+          ref={resultRef}
+          aria-label="Resultado do clima"
+          aria-busy={status === 'loading'}
+          tabIndex={-1}
+        >
           {renderWeatherState()}
         </section>
       </div>

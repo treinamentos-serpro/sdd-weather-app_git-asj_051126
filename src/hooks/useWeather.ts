@@ -1,14 +1,19 @@
 import { useReducer, useRef } from 'react';
 import { getWeather, searchCities } from '../services/weatherService';
-import type { City, WeatherData } from '../types/weather';
+import type { City, WeatherData, WeatherErrorCode } from '../types/weather';
 
 export type WeatherHookStatus = 'idle' | 'loading' | 'success' | 'error' | 'empty';
+
+export interface WeatherHookError extends Error {
+  code?: WeatherErrorCode;
+  status?: number;
+}
 
 interface WeatherHookState {
   status: WeatherHookStatus;
   data: WeatherData | null;
   cities: City[];
-  error: string | null;
+  error: WeatherHookError | null;
   query: string;
 }
 
@@ -18,7 +23,7 @@ type WeatherHookAction =
   | { type: 'empty' }
   | { type: 'selection-started'; city: City }
   | { type: 'success'; data: WeatherData }
-  | { type: 'failure'; error: string };
+  | { type: 'failure'; error: WeatherHookError };
 
 type RetryOperation = { type: 'search'; name: string } | { type: 'weather'; city: City };
 
@@ -59,8 +64,12 @@ function weatherReducer(state: WeatherHookState, action: WeatherHookAction): Wea
   }
 }
 
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Ocorreu um erro inesperado.';
+function normalizeError(error: unknown): WeatherHookError {
+  if (error instanceof Error) return error as WeatherHookError;
+
+  return Object.assign(new Error('Ocorreu um erro inesperado.'), {
+    code: 'invalid-response' as const,
+  });
 }
 
 export default function useWeather() {
@@ -97,7 +106,7 @@ export default function useWeather() {
       dispatch({ type: 'success', data });
     } catch (error) {
       if (requestId !== requestIdRef.current) return;
-      dispatch({ type: 'failure', error: getErrorMessage(error) });
+      dispatch({ type: 'failure', error: normalizeError(error) });
     }
   }
 
@@ -113,7 +122,7 @@ export default function useWeather() {
       dispatch({ type: 'success', data });
     } catch (error) {
       if (requestId !== requestIdRef.current) return;
-      dispatch({ type: 'failure', error: getErrorMessage(error) });
+      dispatch({ type: 'failure', error: normalizeError(error) });
     }
   }
 

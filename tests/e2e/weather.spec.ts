@@ -70,6 +70,7 @@ test('busca uma cidade, exibe a previsão e converte a temperatura para Fahrenhe
 
   await expect(page.getByRole('heading', { name: 'Campinas', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Previsão de 5 dias' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Resultado do clima' })).toBeFocused();
 
   await page.getByRole('button', { name: 'Fahrenheit' }).click();
 
@@ -85,6 +86,7 @@ test('mostra o estado vazio quando o geocoding não retorna results', async ({ p
   await searchCampinas(page);
 
   await expect(page.getByRole('heading', { name: 'Nenhuma cidade encontrada' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Resultado do clima' })).toBeFocused();
   expect(forecastRequests).toBe(0);
 });
 

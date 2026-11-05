@@ -26,4 +26,21 @@ describe('CurrentWeather partial data', () => {
     const currentWeather = screen.getByRole('region', { name: 'Clima atual' });
     expect(within(currentWeather).getAllByText('Indisponível')).toHaveLength(6);
   });
+
+  it('does not render non-finite measurements as NaN or Infinity', () => {
+    const invalidCurrent: CurrentWeatherData = {
+      temperatureCelsius: Number.NaN,
+      weatherCode: Number.NaN,
+      relativeHumidityPercent: Number.NaN,
+      windSpeedKmh: Number.POSITIVE_INFINITY,
+      precipitationMm: Number.NaN,
+      surfacePressureHpa: Number.NEGATIVE_INFINITY,
+    };
+
+    render(<CurrentWeather city={city} current={invalidCurrent} unit="celsius" />);
+
+    const currentWeather = screen.getByRole('region', { name: 'Clima atual' });
+    expect(within(currentWeather).getAllByText('Indisponível')).toHaveLength(6);
+    expect(currentWeather).not.toHaveTextContent(/NaN|Infinity|undefined/);
+  });
 });

@@ -12,9 +12,10 @@ interface ForecastCardProps {
 export default function ForecastCard({ day, index, unit }: ForecastCardProps) {
   const weather = getWeatherInfo(day.weatherCode);
   const precipitation =
-    day.precipitationProbability === null
-      ? 'Indisponível'
-      : `${Math.round(day.precipitationProbability)}%`;
+    typeof day.precipitationProbability === 'number' &&
+    Number.isFinite(day.precipitationProbability)
+      ? `${Math.round(day.precipitationProbability)}%`
+      : 'Indisponível';
 
   return (
     <li className="flex min-w-0 flex-col items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-3 text-center text-white shadow-glass backdrop-blur-md sm:p-4">

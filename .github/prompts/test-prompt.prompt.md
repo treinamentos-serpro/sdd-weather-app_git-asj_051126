@@ -1,5 +1,5 @@
 ---
-mode: agent
+agent: agent
 description: 'Gera testes unitários (Vitest) e E2E (Playwright) a partir dos critérios de aceite.'
 ---
 

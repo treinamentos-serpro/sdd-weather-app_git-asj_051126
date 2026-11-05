@@ -202,6 +202,48 @@ describe('getWeather', () => {
     await rejection;
   });
 
+  it('keeps the timeout active while reading the response body', async () => {
+    vi.useFakeTimers();
+    let requestSignal: AbortSignal | undefined;
+    let markBodyStarted: () => void = () => {};
+    const bodyStarted = new Promise<void>((resolve) => {
+      markBodyStarted = resolve;
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>().mockImplementation(async (_input, init) => {
+        requestSignal = init?.signal ?? undefined;
+        return {
+          ok: true,
+          status: 200,
+          json: () => {
+            markBodyStarted();
+            return new Promise<unknown>((_resolve, reject) => {
+              requestSignal?.addEventListener(
+                'abort',
+                () => reject(new DOMException('Aborted', 'AbortError')),
+                { once: true },
+              );
+            });
+          },
+        } as unknown as Response;
+      }),
+    );
+
+    const request = getWeather(city);
+    const rejection = expect(request).rejects.toMatchObject({
+      name: 'WeatherServiceError',
+      code: 'timeout',
+      message: 'A requisição demorou demais.',
+    });
+    await bodyStarted;
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(requestSignal?.aborted).toBe(true);
+    await rejection;
+  });
+
   it('converts invalid forecast JSON to WeatherServiceError', async () => {
     vi.stubGlobal(
       'fetch',
@@ -223,12 +265,16 @@ describe('getWeather', () => {
   it('keeps partial forecast values unavailable and normalizes to five days', async () => {
     stubFetch({
       timezone: 'America/Sao_Paulo',
-      current: { temperature_2m: null, weather_code: null },
+      current: {
+        temperature_2m: null,
+        weather_code: null,
+        relative_humidity_2m: Number.NaN,
+      },
       daily: {
         time: ['2026-11-05', '2026-11-06'],
         weather_code: [1],
         temperature_2m_min: [null],
-        temperature_2m_max: [28.2],
+        temperature_2m_max: [Number.NaN],
         precipitation_probability_max: [10],
       },
     });
@@ -237,12 +283,13 @@ describe('getWeather', () => {
 
     expect(weather.current.temperatureCelsius).toBeNull();
     expect(weather.current.weatherCode).toBeNull();
+    expect(weather.current.relativeHumidityPercent).toBeNull();
     expect(weather.forecast).toHaveLength(5);
     expect(weather.forecast[0]).toMatchObject({
       date: '2026-11-05',
       weatherCode: 1,
       minimumCelsius: null,
-      maximumCelsius: 28.2,
+      maximumCelsius: null,
       precipitationProbability: 10,
     });
     expect(weather.forecast[1]).toMatchObject({

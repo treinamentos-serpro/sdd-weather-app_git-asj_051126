@@ -13,10 +13,10 @@ export default function ForecastList({ forecast, unit }: ForecastListProps) {
     forecast.length !== 5 ||
     forecast.some(
       (day) =>
-        day.minimumCelsius === null ||
-        day.maximumCelsius === null ||
-        day.weatherCode === null ||
-        day.precipitationProbability === null,
+        !Number.isFinite(day.minimumCelsius) ||
+        !Number.isFinite(day.maximumCelsius) ||
+        !Number.isFinite(day.weatherCode) ||
+        !Number.isFinite(day.precipitationProbability),
     );
 
   return (

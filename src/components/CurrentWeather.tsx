@@ -29,7 +29,7 @@ function Metric({ icon, label, value }: MetricProps) {
 }
 
 function formatMetric(value: number | null, unit: string, maximumFractionDigits = 0): string {
-  if (value === null) return 'Indisponível';
+  if (value === null || !Number.isFinite(value)) return 'Indisponível';
 
   const formattedValue = new Intl.NumberFormat('pt-BR', {
     maximumFractionDigits,
@@ -41,10 +41,13 @@ function formatMetric(value: number | null, unit: string, maximumFractionDigits 
 
 export default function CurrentWeather({ city, current, unit }: CurrentWeatherProps) {
   const weather = getWeatherInfo(current.weatherCode);
-  const weatherLabel = current.weatherCode === null ? 'Indisponível' : weather.label;
+  const weatherLabel =
+    current.weatherCode === null || !Number.isFinite(current.weatherCode)
+      ? 'Indisponível'
+      : weather.label;
   const location = [city.admin1, city.country].filter(Boolean).join(', ');
   const temperatureClassName =
-    current.temperatureCelsius === null
+    current.temperatureCelsius === null || !Number.isFinite(current.temperatureCelsius)
       ? 'text-lg font-semibold'
       : 'text-5xl font-light tabular-nums sm:text-6xl md:text-7xl';
 

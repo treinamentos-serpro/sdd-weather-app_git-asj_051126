@@ -39,17 +39,36 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-export async function fetchWithTimeout(url: string): Promise<Response> {
+function isAbortError(error: unknown): boolean {
+  return isRecord(error) && error.name === 'AbortError';
+}
+
+async function fetchWithTimeout<T>(
+  url: string,
+  processResponse: (response: Response) => Promise<T>,
+): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    return await fetch(url, { signal: controller.signal });
-  } catch (error) {
-    if (isRecord(error) && error.name === 'AbortError') {
-      throw new WeatherServiceError('A requisição demorou demais.', 'timeout');
+    let response: Response;
+    try {
+      response = await fetch(url, { signal: controller.signal });
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw new WeatherServiceError('A requisição demorou demais.', 'timeout');
+      }
+      throw new WeatherServiceError('Falha de rede.', 'network');
     }
-    throw new WeatherServiceError('Falha de rede.', 'network');
+
+    try {
+      return await processResponse(response);
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw new WeatherServiceError('A requisição demorou demais.', 'timeout');
+      }
+      throw error;
+    }
   } finally {
     clearTimeout(timeout);
   }
@@ -156,36 +175,46 @@ export async function searchCities(name: string): Promise<City[]> {
   if (!query) return [];
 
   const url = `${GEOCODING_URL}?name=${encodeURIComponent(query)}&count=5&language=pt&format=json`;
-  const response = await fetchWithTimeout(url);
+  return fetchWithTimeout(url, async (response) => {
+    if (!response.ok) {
+      throw new WeatherServiceError('Não foi possível buscar cidades.', 'http', response.status);
+    }
 
-  if (!response.ok) {
-    throw new WeatherServiceError('Não foi possível buscar cidades.', 'http', response.status);
-  }
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw new WeatherServiceError(
+        'A resposta de busca de cidades é inválida.',
+        'invalid-response',
+      );
+    }
 
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new WeatherServiceError('A resposta de busca de cidades é inválida.', 'invalid-response');
-  }
+    if (!isRecord(payload)) {
+      throw new WeatherServiceError(
+        'A resposta de busca de cidades é inválida.',
+        'invalid-response',
+      );
+    }
 
-  if (!isRecord(payload)) {
-    throw new WeatherServiceError('A resposta de busca de cidades é inválida.', 'invalid-response');
-  }
+    const results = (payload as GeocodingResponse).results;
+    if (
+      results === null ||
+      results === undefined ||
+      (Array.isArray(results) && results.length === 0)
+    ) {
+      return [];
+    }
+    if (!Array.isArray(results)) {
+      throw new WeatherServiceError(
+        'A resposta de busca de cidades é inválida.',
+        'invalid-response',
+      );
+    }
 
-  const results = (payload as GeocodingResponse).results;
-  if (
-    results === null ||
-    results === undefined ||
-    (Array.isArray(results) && results.length === 0)
-  ) {
-    return [];
-  }
-  if (!Array.isArray(results)) {
-    throw new WeatherServiceError('A resposta de busca de cidades é inválida.', 'invalid-response');
-  }
-
-  return results.map(mapCity);
+    return results.map(mapCity);
+  });
 }
 
 export async function getWeather(city: City): Promise<WeatherData> {
@@ -199,31 +228,32 @@ export async function getWeather(city: City): Promise<WeatherData> {
     timezone: 'auto',
     temperature_unit: 'celsius',
   });
-  const response = await fetchWithTimeout(`${FORECAST_URL}?${params.toString()}`);
+  return fetchWithTimeout(`${FORECAST_URL}?${params.toString()}`, async (response) => {
+    if (!response.ok) {
+      throw new WeatherServiceError('Não foi possível carregar o clima.', 'http', response.status);
+    }
 
-  if (!response.ok) {
-    throw new WeatherServiceError('Não foi possível carregar o clima.', 'http', response.status);
-  }
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw new WeatherServiceError('A resposta de clima é inválida.', 'invalid-response');
+    }
 
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new WeatherServiceError('A resposta de clima é inválida.', 'invalid-response');
-  }
+    if (!isRecord(payload) || !isRecord(payload.current) || !isRecord(payload.daily)) {
+      throw new WeatherServiceError('A resposta de clima está incompleta.', 'invalid-response');
+    }
 
-  if (!isRecord(payload) || !isRecord(payload.current) || !isRecord(payload.daily)) {
-    throw new WeatherServiceError('A resposta de clima está incompleta.', 'invalid-response');
-  }
+    if (typeof payload.timezone !== 'string') {
+      throw new WeatherServiceError('A resposta de clima é inválida.', 'invalid-response');
+    }
 
-  if (typeof payload.timezone !== 'string') {
-    throw new WeatherServiceError('A resposta de clima é inválida.', 'invalid-response');
-  }
-
-  return {
-    city,
-    timezone: payload.timezone,
-    current: mapCurrent(payload.current),
-    forecast: mapForecast(payload.daily),
-  };
+    return {
+      city,
+      timezone: payload.timezone,
+      current: mapCurrent(payload.current),
+      forecast: mapForecast(payload.daily),
+    };
+  });
 }
