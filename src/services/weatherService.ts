@@ -46,7 +46,7 @@ export async function fetchWithTimeout(url: string): Promise<Response> {
   try {
     return await fetch(url, { signal: controller.signal });
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (isRecord(error) && error.name === 'AbortError') {
       throw new WeatherServiceError('A requisição demorou demais.', 'timeout');
     }
     throw new WeatherServiceError('Falha de rede.', 'network');
@@ -144,7 +144,10 @@ function mapForecast(value: Record<string, unknown>): ForecastDay[] {
     weatherCode: numberOrNull(weatherCodes[index]),
     minimumCelsius: numberOrNull(minimums[index]),
     maximumCelsius: numberOrNull(maximums[index]),
-    precipitationProbability: numberOrNull(precipitationProbabilities[index]),
+    precipitationProbability:
+      precipitationProbabilities[index] === null
+        ? 0
+        : numberOrNull(precipitationProbabilities[index]),
   }));
 }
 
@@ -171,7 +174,11 @@ export async function searchCities(name: string): Promise<City[]> {
   }
 
   const results = (payload as GeocodingResponse).results;
-  if (results === null || (Array.isArray(results) && results.length === 0)) {
+  if (
+    results === null ||
+    results === undefined ||
+    (Array.isArray(results) && results.length === 0)
+  ) {
     return [];
   }
   if (!Array.isArray(results)) {

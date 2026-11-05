@@ -41,6 +41,7 @@ function formatMetric(value: number | null, unit: string, maximumFractionDigits 
 
 export default function CurrentWeather({ city, current, unit }: CurrentWeatherProps) {
   const weather = getWeatherInfo(current.weatherCode);
+  const weatherLabel = current.weatherCode === null ? 'Indisponível' : weather.label;
   const location = [city.admin1, city.country].filter(Boolean).join(', ');
   const temperatureClassName =
     current.temperatureCelsius === null
@@ -65,7 +66,7 @@ export default function CurrentWeather({ city, current, unit }: CurrentWeatherPr
               {formatTemperature(current.temperatureCelsius, unit)}
             </p>
           </div>
-          <p className="mt-3 text-lg text-white/75">{weather.label}</p>
+          <p className="mt-3 text-lg text-white/75">{weatherLabel}</p>
         </div>
 
         <dl className="grid grid-cols-2 gap-3">
